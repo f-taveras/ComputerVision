@@ -1,66 +1,94 @@
 import cv2 as cv
 import numpy as np
+import imutils
+import argparse
 
-# Load video (or camera)
-video = cv.VideoCapture("videos/indians.mp4")  # Use 0 for webcam
-backSub = cv.createBackgroundSubtractorMOG2()
+# Load video
+# video = cv.VideoCapture("videos/dogovideo.mp4")
+# backSub = cv.createBackgroundSubtractorMOG2()
+# resized_video = cv.resize(video, (1080, 720))
 
-if not video.isOpened():
-    print("Error opening the video")
-    exit()
 
-while True:
-    ret, frame = video.read()
-    if not ret:
-        break
 
-    # Resize frame for performance and consistency
-    frame_resized = cv.resize(frame, (1080, 720))
+# if not video.isOpened():
+#     print("Error opening the video")
+#     exit()
 
-    # Apply background subtraction
-    fg_mask = backSub.apply(frame_resized)
 
-    # Threshold to filter out shadows (MOG2 outputs gray for shadows)
-    _, mask_thresh = cv.threshold(fg_mask, 100, 255, cv.THRESH_BINARY)
+# detecting function. Will draw bounding boxes around detected objects and enumarete them as "Person 1", "Person 2", etc.
 
-    # Clean up the mask using erosion (removes noise)
-    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (3, 3))
-    mask_eroded = cv.morphologyEx(mask_thresh, cv.MORPH_ERODE, kernel)
+def detect(resized_video):
+    bounding_boxes, weights = hog.detectMultiScale(resized_video, winStride=(4, 4), padding=(8, 8), scale=1.05)
 
-    # Find contours from the binary mask
-    contours, _ = cv.findContours(mask_eroded, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+    person = 1
+    for x, y, w, h in bounding_boxes:
+        cv.rectangle(resized_video, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        cv.putText(resized_video, f"Person {person}", (x, y - 10), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+        person += 1
 
-    # Draw all contours for debugging (optional)
-    frame_with_contours = frame_resized.copy()
-    cv.drawContours(frame_with_contours, contours, -1, (0, 255, 0), 2)
+    cv.putText(resized_video, 'Status: Detecting ...', (40, 40), cv.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
+    cv.putText(resized_video, f'Total: {person - 1}', (40, 70), cv.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
+    cv.imshow('output', resized_video)
 
-    # Minimum area to consider as a person
-    min_contour_area = 1000
+    return resized_video
 
-    # Filter large enough contours
-    large_contours = [cnt for cnt in contours if cv.contourArea(cnt) > min_contour_area]
 
-    # Final output frame with bounding boxes
-    frame_out = frame_resized.copy()
-    for cnt in large_contours:
-        area = cv.contourArea(cnt)
-        x, y, w, h = cv.boundingRect(cnt)
-        aspect_ratio = w / float(h)
+# Human detection function
 
-        # Filter based on aspect ratio and area (optional)
-        if 0.3 < aspect_ratio < 3 and area < 50000:
-            # Draw bounding box
-            cv.rectangle(frame_out, (x, y), (x + w, y + h), (0, 0, 255), 3)
-            # Draw area label
-            cv.putText(frame_out, f"{int(area)}", (x, y - 10),
-                       cv.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+def humanDetection(args):
+    video_path = args['video']
 
-    # Show results
-    cv.imshow("Bounding Box", frame_out)
+    writer = None
+    if video_path is not None:
+        print("[INFO] opening video file...")
+        useVideo(video_path, writer)
 
-    # Exit with 'q'
-    if cv.waitKey(30) & 0xFF == ord("q"):
-        break
 
-video.release()
-cv.destroyAllWindows()
+# Gets video and resizes it 
+
+def useVideo(path, writer): # change video for path to use args in the console
+
+    video = cv.VideoCapture(path)
+    check, frame = video.read()
+    if check == False:
+        print("Video not found")
+        return
+    
+    print("Detecting ..")
+    while video.isOpened():
+        check, frame = video.read()
+        
+        if check:
+            frame = imutils.resize(frame, width=min(800, frame.shape[1]))
+            frame = detect(frame)
+
+            if writer is not None:
+                writer.write(frame)
+
+            key = cv.waitKey(1)
+            if key == ord('q'):
+                break
+        else:
+            break
+    video.release()
+    cv.destroyAllWindows()
+
+
+
+def argsparser():
+    arg_parse = argparse.ArgumentParser()
+    arg_parse.add_argument("-v", "--video", default=None, help="path to video file")
+    args = vars(arg_parse.parse_args())
+
+    return args
+
+
+if __name__ == "__main__":
+    # Initialize HOG person detector
+    hog = cv.HOGDescriptor()
+    hog.setSVMDetector(cv.HOGDescriptor_getDefaultPeopleDetector())
+    args = argsparser()
+    humanDetection(args)
+
+
+
