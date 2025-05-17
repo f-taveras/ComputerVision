@@ -3,18 +3,6 @@ import numpy as np
 import imutils
 import argparse
 
-# Load video
-# video = cv.VideoCapture("videos/dogovideo.mp4")
-# backSub = cv.createBackgroundSubtractorMOG2()
-# resized_video = cv.resize(video, (1080, 720))
-
-
-
-# if not video.isOpened():
-#     print("Error opening the video")
-#     exit()
-
-
 # detecting function. Will draw bounding boxes around detected objects and enumarete them as "Person 1", "Person 2", etc.
 
 def detect(resized_video):
@@ -46,7 +34,7 @@ def humanDetection(args):
 
 # Gets video and resizes it 
 
-def useVideo(path, writer): # change video for path to use args in the console
+def useVideo(path, writer): 
 
     video = cv.VideoCapture(path)
     check, frame = video.read()
@@ -87,6 +75,8 @@ if __name__ == "__main__":
     # Initialize HOG person detector
     hog = cv.HOGDescriptor()
     hog.setSVMDetector(cv.HOGDescriptor_getDefaultPeopleDetector())
+
+    # Parse arguments
     args = argsparser()
     humanDetection(args)
 
