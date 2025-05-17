@@ -1,84 +1,71 @@
 import cv2 as cv
-import numpy as np
 import imutils
 import argparse
+from ultralytics import YOLO
 
-# detecting function. Will draw bounding boxes around detected objects and enumarete them as "Person 1", "Person 2", etc.
+# Detection using YOLOv8
+def detect_yolov8(frame, model):
+    results = model(frame)[0]
+    person_count = 0
 
-def detect(resized_video):
-    bounding_boxes, weights = hog.detectMultiScale(resized_video, winStride=(4, 4), padding=(8, 8), scale=1.05)
+    for box in results.boxes:
+        cls_id = int(box.cls[0])
+        conf = float(box.conf[0])
+        label = model.names[cls_id]
 
-    person = 1
-    for x, y, w, h in bounding_boxes:
-        cv.rectangle(resized_video, (x, y), (x + w, y + h), (0, 255, 0), 2)
-        cv.putText(resized_video, f"Person {person}", (x, y - 10), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-        person += 1
+        if label == 'person' and conf > 0.5:
+            x1, y1, x2, y2 = map(int, box.xyxy[0])
+            person_count += 1
+            cv.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv.putText(frame, f"Person {person_count}", (x1, y1 - 10), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-    cv.putText(resized_video, 'Status: Detecting ...', (40, 40), cv.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
-    cv.putText(resized_video, f'Total: {person - 1}', (40, 70), cv.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
-    cv.imshow('output', resized_video)
-
-    return resized_video
-
-
-# Human detection function
-
-def humanDetection(args):
-    video_path = args['video']
-
-    writer = None
-    if video_path is not None:
-        print("[INFO] opening video file...")
-        useVideo(video_path, writer)
+    cv.putText(frame, 'Status: Detecting ...', (40, 40), cv.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
+    cv.putText(frame, f'Total: {person_count}', (40, 70), cv.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
+    cv.imshow("output", frame)
+    return frame
 
 
-# Gets video and resizes it 
+def use_video(path, writer, model):
+    cap = cv.VideoCapture(path)
 
-def useVideo(path, writer): 
-
-    video = cv.VideoCapture(path)
-    check, frame = video.read()
-    if check == False:
-        print("Video not found")
+    if not cap.isOpened():
+        print("Video not found or cannot be opened.")
         return
-    
-    print("Detecting ..")
-    while video.isOpened():
-        check, frame = video.read()
-        
-        if check:
-            frame = imutils.resize(frame, width=min(800, frame.shape[1]))
-            frame = detect(frame)
 
-            if writer is not None:
-                writer.write(frame)
-
-            key = cv.waitKey(1)
-            if key == ord('q'):
-                break
-        else:
+    print("Detecting ...")
+    while True:
+        ret, frame = cap.read()
+        if not ret:
             break
-    video.release()
-    cv.destroyAllWindows()
 
+        frame = imutils.resize(frame, width=min(800, frame.shape[1]))
+        frame = detect_yolov8(frame, model)
+
+        if writer is not None:
+            writer.write(frame)
+
+        key = cv.waitKey(1) & 0xFF
+        if key == ord('q'):
+            break
+
+    cap.release()
+    cv.destroyAllWindows()
 
 
 def argsparser():
     arg_parse = argparse.ArgumentParser()
-    arg_parse.add_argument("-v", "--video", default=None, help="path to video file")
-    args = vars(arg_parse.parse_args())
-
-    return args
+    arg_parse.add_argument("-v", "--video", help="Path to video file")
+    arg_parse.add_argument("-m", "--model", default="yolov8n.pt", help="Path to YOLOv8 model file (e.g., yolov8n.pt)")
+    return vars(arg_parse.parse_args())
 
 
 if __name__ == "__main__":
-    # Initialize HOG person detector
-    hog = cv.HOGDescriptor()
-    hog.setSVMDetector(cv.HOGDescriptor_getDefaultPeopleDetector())
-
-    # Parse arguments
     args = argsparser()
-    humanDetection(args)
+    video_path = args['video']
+    model_path = args['model']
 
+    # Load YOLOv8 model
+    model = YOLO(model_path)
 
-
+    writer = None
+    use_video(video_path, writer, model)
