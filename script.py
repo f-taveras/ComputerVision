@@ -2,11 +2,24 @@ import cv2 as cv
 import imutils
 import argparse
 from ultralytics import YOLO
+import numpy as np
 
-# Detection using YOLOv8
+
+
+
+
+FLOOR_POLYGON = np.array([[100, 300], [700, 300], [750, 600], [50, 600]])
+
+def point_inside_polygon(x, y, polygon):
+    return cv.pointPolygonTest(polygon, (x, y), False) >= 0
+
 def detect_yolov8(frame, model):
     results = model(frame)[0]
     person_count = 0
+    in_floor_count = 0
+
+    # Draw the floor area
+    cv.polylines(frame, [FLOOR_POLYGON], isClosed=True, color=(255, 255, 0), thickness=2)
 
     for box in results.boxes:
         cls_id = int(box.cls[0])
@@ -16,14 +29,28 @@ def detect_yolov8(frame, model):
         if label == 'person' and conf > 0.5:
             x1, y1, x2, y2 = map(int, box.xyxy[0])
             person_count += 1
-            cv.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            cv.putText(frame, f"Person {person_count}", (x1, y1 - 10), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+            center_bottom = (int((x1 + x2) / 2), y2)
+
+            # Check if the bottom center point is inside the floor area
+            in_floor = point_inside_polygon(center_bottom[0], center_bottom[1], FLOOR_POLYGON)
+
+            if in_floor:
+                color = (0, 255, 0)
+                in_floor_count += 1
+                status_text = f"IN FLOOR {in_floor_count}"
+            else:
+                color = (0, 0, 255)
+                status_text = "OUTSIDE"
+
+            # Draw bounding box and status
+            cv.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+            cv.putText(frame, f"Person {person_count}: {status_text}", (x1, y1 - 10), cv.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
     cv.putText(frame, 'Status: Detecting ...', (40, 40), cv.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
-    cv.putText(frame, f'Total: {person_count}', (40, 70), cv.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
+    cv.putText(frame, f'Total: {person_count} | In Floor: {in_floor_count}', (40, 70), cv.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
     cv.imshow("output", frame)
-    return frame
 
+    return frame
 
 def use_video(path, writer, model):
     cap = cv.VideoCapture(path)
